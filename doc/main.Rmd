@@ -8,7 +8,7 @@ output:
 
 In your final repo, there should be an R markdown file that organizes **all computational steps** for evaluating your proposed Facial Expression Recognition framework. 
 
-This file is currently a template for running evaluation experiments. You should update it according to your codes but following precisely the same structure. 
+This file is currently a template for running evaluation experiments. You should update it according to your codes but following precisely th    e same structure. 
 
 ```{r message=FALSE}
 if(!require("EBImage")){
@@ -58,14 +58,14 @@ library(WeightedROC)
 ### Step 0 set work directories
 ```{r wkdir, eval=FALSE}
 set.seed(2020)
-# setwd("~/Project3-FacialEmotionRecognition/doc")
+setwd("./")
 # here replace it with your own path or manually set it in RStudio to where this rmd file is located. 
 # use relative path for reproducibility
 ```
 
 Provide directories for training images. Training images and Training fiducial points will be in different subfolders. 
 ```{r}
-train_dir <- "../data/train_set/" # This will be modified for different data sets.
+train_dir <- "../../train_set/" # This will be modified for different data sets.
 train_image_dir <- paste(train_dir, "images/", sep="")
 train_pt_dir <- paste(train_dir,  "points/", sep="")
 train_label_path <- paste(train_dir, "label.csv", sep="") 
@@ -84,7 +84,7 @@ In this chunk, we have a set of controls for the evaluation experiments.
 
 ```{r exp_setup}
 run.cv <- TRUE # run cross-validation on the training set
-sample.reweight <- TRUE # run sample reweighting in model training
+sample.reweight <- FALSE # run sample reweighting in model training
 K <- 5  # number of CV folds
 run.feature.train <- TRUE # process features for training set
 run.test <- TRUE # run evaluation on an independent test set
@@ -105,7 +105,7 @@ info <- read.csv(train_label_path)
 n <- nrow(info)
 n_train <- round(n*(4/5), 0)
 train_idx <- sample(info$Index, n_train, replace = F)
-test_idx <- setdiff(info$Index, train_idx)
+test_idx <- setdiff(info$Index, train_idx) #get the index in info$Index but different from train_idx
 ```
 
 If you choose to extract features from images, such as using Gabor filter, R memory will exhaust all images are read together. The solution is to repeat reading a smaller batch(e.g 100) and process them. 
@@ -195,8 +195,12 @@ source("../lib/test.R")
 
 ```{r runcv}
 source("../lib/cross_validation.R")
-feature_train = as.matrix(dat_train[, -6007])
-label_train = as.integer(dat_train$label) 
+#feature_train = as.matrix(dat_train[, -6007])
+#label_train = as.integer(dat_train$label)
+feature_train <- data.frame(read.csv("../output/feature_train_smote.csv"))
+label_train <- data.frame(read.csv("../output/label_train_smote.csv"))
+feature_train <- as.matrix(feature_train[, -1])
+label_train <- as.matrix(label_train[, -1])
 if(run.cv){
   res_cv <- matrix(0, nrow = length(lmbd), ncol = 4)
   for(i in 1:length(lmbd)){
