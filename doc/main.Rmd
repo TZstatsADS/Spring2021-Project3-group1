@@ -95,7 +95,8 @@ run.feature.train <- TRUE # process features for training set
 run.test <- TRUE # run evaluation on an independent test set
 run.feature.test <- TRUE # process features for test set
 
-run.cv.gbm <- TRUE # run cross-validation on the training set for gbm 
+run.cv.gbm <- FALSE # run cross-validation on the training set for gbm 
+run.cv.gbm.graph <- TRUE # run cross-validation on the training set for gbm 
 run.train.gbm <- TRUE # run evaluation on entire train set
 run.test.gbm <- TRUE # run evaluation on an independent test set
 ```
@@ -206,12 +207,8 @@ source("../lib/cross_validation.R")
 * Do model selection by choosing among different values of training model parameters.
 
 ```{r runcv}
-#feature_train = as.matrix(dat_train[, -6007])
-#label_train = as.integer(dat_train$label)
-feature_train <- data.frame(read.csv("../../train_set/feature_train_smote.csv"))
-label_train <- data.frame(read.csv("../../train_set/label_train_smote.csv"))
-feature_train <- as.matrix(feature_train[, -1])
-label_train <- as.integer(label_train[, -1])
+feature_train = as.matrix(dat_train[, -6007])
+label_train = as.integer(dat_train$label)
 if(run.cv.gbm){
   res_cv <- matrix(0, nrow = nrow(parameter_gbm), ncol = 4)
   for(i in 1:nrow(parameter_gbm)){
@@ -221,10 +218,10 @@ if(run.cv.gbm){
                               num_trees = parameter_gbm$n.trees[i], 
                               shrink = parameter_gbm$shrinkage[i], 
                               K, reweight = sample.reweight)
-  save(res_cv, file="../output/res_cv_gbm_resampling.RData")
+  save(res_cv, file="../output/res_cv_gbm_original.RData")
   }
 }else{
-  load("../output/res_cv_gbm_resampling.RData")
+  load("../output/res_cv_gbm_original.RData")
 }
 
 ```
@@ -239,7 +236,7 @@ gbm_cv_results[order(gbm_cv_results$mean_AUC, decreasing = TRUE), ]
 Visualize cross-validation results. 
 ```{r cv_vis}
   
-if(run.cv.gbm){
+if(run.cv.gbm.graph){
   p1 <- ggplot(gbm_cv_results[gbm_cv_results$n.trees == 600, ],
     aes(x = as.factor(shrinkage), y = mean_error,
                ymin = mean_error - sd_error, ymax = mean_error + sd_error)) + 
@@ -299,9 +296,9 @@ if(run.train.gbm){
                                            num_trees = best_gbm_n.trees,
                                            shrink = best_gbm_shrinkage))
     }
-  save(fit_train_gbm, tm_train, file="../output/fit_train_gbm_resampling.RData")
+  save(fit_train_gbm, tm_train, file="../output/fit_train_gbm_original.RData")
 } else { 
-  load(file="../output/fit_train_gbm_resampling.RData")
+  load(file="../output/fit_train_gbm_original.RData")
 }
 
 ```
@@ -311,8 +308,8 @@ if(run.train.gbm){
 tm_test_gbm = NA
 feature_test <- as.matrix(dat_test[, -6007])
 label_test <- as.integer(dat_test$label)
-load(file="../output/fit_train_gbm_resampling.RData")
-tm_test <- system.time(
+load(file="../output/fit_train_gbm_original.RData")
+tm_test_gbm <- system.time(
   {prob_pred <- test(fit_train_gbm, feature_test, pred.type = 'response');
     label_pred <- ifelse(prob_pred >= 0.5, 1, 0)})
 ```
@@ -341,13 +338,117 @@ cat("The AUC of model:", "( shinkage = ", best_gbm_shrinkage, ", n.trees = ",
 
 ```
 
+### Train on the resampling dataset
+Then, we try the resampling method called SMOTE (Synthetic Minority Over-sampling Technique) to let the data have a comparable amount between these two labels to deal with the imbalance dataset. After implementing SMOTE, the number of data with different labels becomes 1934:1933, much more balanced according to the original proportion, which was 1934:466.
+
+```{r runcv_resample}
+feature_train_new <- data.frame(read.csv("../../train_set/feature_train_smote.csv"))
+label_train_new <- data.frame(read.csv("../../train_set/label_train_smote.csv"))
+feature_train_new <- as.matrix(feature_train_new[, -1])
+label_train_new <- as.integer(label_train_new[, -1])
+if(run.cv.gbm){
+  res_cv <- matrix(0, nrow = nrow(parameter_gbm), ncol = 4)
+  for(i in 1:nrow(parameter_gbm)){
+    cat("n.trees = ", parameter_gbm$n.trees[i], ", 
+        shrinkage = ", parameter_gbm$shrinkage[i],"\n", sep = "")
+    res_cv[i,] <- cv.function(features = feature_train_new, labels = label_train_new,
+                              num_trees = parameter_gbm$n.trees[i], 
+                              shrink = parameter_gbm$shrinkage[i], 
+                              K, reweight = sample.reweight)
+  save(res_cv, file="../output/res_cv_gbm_resampling.RData")
+  }
+}else{
+  load("../output/res_cv_gbm_resampling.RData")
+}
+
+```
+
+```{r gbm_resample, echo=FALSE}
+res_cv_gbm <- as.data.frame(res_cv) 
+colnames(res_cv_gbm) <- c("mean_error", "sd_error", "mean_AUC", "sd_AUC")
+gbm_cv_results = data.frame(parameter_gbm, res_cv_gbm)
+gbm_cv_results[order(gbm_cv_results$mean_AUC, decreasing = TRUE), ]
+```
+
+* Choose the "best" parameter value on GBM model with resampling dataset
+
+```{r best_gbm_model_resample}
+best_gbm_resample <- gbm_cv_results[order(gbm_cv_results$mean_AUC, decreasing = TRUE), ][1, ]
+best_gbm_shrinkage_resample <- best_gbm_resample$shrinkage
+best_gbm_n.trees_resample <- best_gbm_resample$n.trees
+```
+
+* Train the model with the entire training set using the selected model (model parameter) via cross-validation.
+```{r final_train_resample}
+# training weights
+if(run.train.gbm){
+  weight_train <- rep(NA, length(label_train_new))
+  for (v in unique(label_train_new)){
+    weight_train[label_train_new == v] = 0.5 * length(label_train_new) / length(label_train_new[label_train_new == v])
+  }
+  if (sample.reweight){
+      tm_train_resample <- system.time(fit_train_gbm_resample 
+                                  <- train(feature_train_new, label_train_new, w = weight_train, 
+                                           num_trees = best_gbm_n.trees_resample, 
+                                           shrink = best_gbm_shrinkage_resample))
+    } else {
+      tm_train_resample <- system.time(fit_train_gbm_resample 
+                                  <- train(feature_train_new, label_train_new, w = NULL, 
+                                           num_trees = best_gbm_n.trees_resample,
+                                           shrink = best_gbm_shrinkage_resample))
+    }
+  save(fit_train_gbm_resample, tm_train_resample, file="../output/fit_train_gbm_resampling.RData")
+} else { 
+  load(file="../output/fit_train_gbm_resampling.RData")
+}
+
+```
+
+### Step 5: Run test on test images after resampling
+```{r test_gbm_resample, message=FALSE}
+tm_test_gbm_resample = NA
+feature_test <- as.matrix(dat_test[, -6007])
+label_test <- as.integer(dat_test$label)
+load(file="../output/fit_train_gbm_resampling.RData")
+tm_test_gbm_resample <- system.time(
+  {prob_pred <- test(fit_train_gbm_resample, feature_test, pred.type = 'response');
+    label_pred <- ifelse(prob_pred >= 0.5, 1, 0)})
+```
+
+
+* evaluation
+```{r}
+## reweight the test data to represent a balanced label distribution
+label_test <- as.integer(dat_test$label)
+weight_test <- rep(NA, length(label_test))
+for (v in unique(label_test)){
+  weight_test[label_test == v] = 0.5 * length(label_test) / length(label_test[label_test == v])
+}
+
+label_test <- ifelse(label_test == 2, 0, 1)
+accu_resample <- sum(weight_test * (label_pred == label_test)) / sum(weight_test)
+tpr.fpr <- WeightedROC(prob_pred, label_test, weight_test)
+auc_resample <- WeightedAUC(tpr.fpr)
+
+
+cat("The accuracy of model:", "( shinkage = ", best_gbm_shrinkage, ", n.trees = ", 
+    best_gbm_n.trees, ") is ", "is", accu_resample*100, "%.\n")
+cat("The AUC of model:", "( shinkage = ", best_gbm_shrinkage, ", n.trees = ", 
+    best_gbm_n.trees, "), is", auc_resample, ".\n")
+
+
+```
+
+
 ### Summarize Running Time
 Prediction performance matters, so does the running times for constructing features and for training the model, especially when the computation resource is limited. 
 ```{r running_time}
 cat("Time for constructing training features=", tm_feature_train[1], "s \n")
 cat("Time for constructing testing features=", tm_feature_test[1], "s \n")
-cat("Time for training model=", tm_train[1], "s \n") 
-cat("Time for testing model=", tm_test[1], "s \n")
+cat("Time for training model=", tm_test_gbm[1], "s \n") 
+cat("Time for testing model=", tm_test_gbm[1], "s \n")
+cat("Time for training model=", tm_train_resample[1], "s \n") 
+cat("Time for testing model=", tm_test_gbm_resample[1], "s \n")
 ```
 
 
