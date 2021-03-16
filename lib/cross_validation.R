@@ -2,11 +2,11 @@
 ### Cross Validation ###
 ########################
 
-### Author: Chengliang Tang
+### Author: Pin-Chun Chen
 ### Project 3
 
 
-cv.function <- function(features, labels, K, l, reweight = FALSE){
+cv.function <- function(features, labels, K, num_trees, shrink, reweight = FALSE){
   ### Input:
   ### - features: feature data frame
   ### - labels: label data vector
@@ -38,14 +38,16 @@ cv.function <- function(features, labels, K, l, reweight = FALSE){
     
     ## model training
     if (reweight){
-      model_train <- train(feature_train, label_train, w = weight_train, l)
+      model_train <- train(feature_train, label_train, w = weight_train, num_trees, shrink)
     } else {
-      model_train <- train(feature_train, label_train, w = NULL, l)
+      model_train <- train(feature_train, label_train, w = NULL, num_trees, shrink)
     }
     
     ## make predictions
-    label_pred <- as.integer(test(model_train, feature_test, pred.type = 'class'))
     prob_pred <- test(model_train, feature_test, pred.type = 'response')
+    label_pred <- ifelse(prob_pred >= 0.5, 1, 0)
+    label_test <- ifelse(label_test == 2, 0, 1)
+    
     cv.error[i] <- 1 - sum(weight_test * (label_pred == label_test)) / sum(weight_test)
     tpr.fpr <- WeightedROC(prob_pred, label_test, weight_test)
     cv.AUC[i] <- WeightedAUC(tpr.fpr)
