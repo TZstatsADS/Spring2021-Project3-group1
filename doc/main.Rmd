@@ -53,6 +53,8 @@ library(ggplot2)
 library(caret)
 library(glmnet)
 library(WeightedROC)
+library(MASS)
+library(vtreat)
 ```
 
 ### Step 0 set work directories
@@ -193,117 +195,125 @@ source("../lib/test.R")
 #### Model selection with cross-validation
 * Do model selection by choosing among different values of training model parameters.
 
-```{r runcv}
+```{r pca-lda.cv}
 source("../lib/cross_validation.R")
-feature_train = as.matrix(dat_train[, -6007])
-label_train = as.integer(dat_train$label) 
-if(run.cv){
-  res_cv <- matrix(0, nrow = length(lmbd), ncol = 4)
-  for(i in 1:length(lmbd)){
-    cat("lambda = ", lmbd[i], "\n")
-    res_cv[i,] <- cv.function(features = feature_train, labels = label_train, K, 
-                              l = lmbd[i], reweight = sample.reweight)
-  save(res_cv, file="../output/res_cv.RData")
-  }
+
+run.pca_lda.cv = FALSE
+if (run.pca_lda.cv){
+  acc_means <- pca_lda.cv(dat_train, K=K)
+  save(acc_means, file="../output/pca_lda_cv.RData")
 }else{
-  load("../output/res_cv.RData")
+  load("../output/pca_lda_cv.RData")
 }
-```
-
-Visualize cross-validation results. 
-```{r cv_vis}
-  
-res_cv <- as.data.frame(res_cv) 
-colnames(res_cv) <- c("mean_error", "sd_error", "mean_AUC", "sd_AUC")
-res_cv$k = as.factor(lmbd)
-
-if(run.cv){
-  p1 <- res_cv %>% 
-    ggplot(aes(x = as.factor(lmbd), y = mean_error,
-               ymin = mean_error - sd_error, ymax = mean_error + sd_error)) + 
-    geom_crossbar() +
-    theme(axis.text.x = element_text(angle = 90, hjust = 1))
-  
-  p2 <- res_cv %>% 
-    ggplot(aes(x = as.factor(lmbd), y = mean_AUC,
-               ymin = mean_AUC - sd_AUC, ymax = mean_AUC + sd_AUC)) + 
-    geom_crossbar() +
-    theme(axis.text.x = element_text(angle = 90, hjust = 1))
-  
-  print(p1)
-  print(p2)
-}
-
-
 ```
 
 
 * Choose the "best" parameter value
 ```{r best_model}
-par_best <- lmbd[which.min(res_cv$mean_error)] # lmbd[which.max(res_cv$mean_AUC)]
+c <- which.max(acc_means)
 ```
 
-* Train the model with the entire training set using the selected model (model parameter) via cross-validation.
-```{r final_train}
-# training weights
-weight_train <- rep(NA, length(label_train))
-for (v in unique(label_train)){
-  weight_train[label_train == v] = 0.5 * length(label_train) / length(label_train[label_train == v])
-}
-if (sample.reweight){
-  tm_train <- system.time(fit_train <- train(feature_train, label_train, w = weight_train, par_best))
-} else {
-  tm_train <- system.time(fit_train <- train(feature_train, label_train, w = NULL, par_best))
-}
-save(fit_train, file="../output/fit_train.RData")
+```{r train and test}
+# Train
+t1 <- proc.time()
+feature_train = as.matrix(dat_train[, -6007])
+label_train = as.integer(dat_train$label)
+pca_train <- prcomp(feature_train)
+
+pca_train_c <- pca_train$x[,1:c]
+dat_train_c <- data.frame(pca_train_c, label_train)
+lda <- lda(label_train ~ ., data=dat_train_c)
+label_predict_train <- predict(lda, data.frame(pca_train_c))
+
+t2 <- proc.time()
+train_time <- t2 - t1
+accuracy_train <- mean(label_predict_train$class == label_train)
+
+
+
+#Test
+t3 <- proc.time()
+feature_test = as.matrix(dat_test[, -6007])
+label_test = as.integer(dat_test$label)
+
+pca_test <- prcomp(feature_test)
+pca_test_c <- pca_test$x[,1:c]
+dat_test_c <- data.frame(pca_test_c, label_test)
+
+label_predict_test <- predict(lda, data.frame(pca_test_c))
+t4 <- proc.time()
+
+test_time <- t4 - t3
+accuracy_test <- mean(label_predict_test$class == label_test)
+
+
+
+cat("Accuracy for training model=", accuracy_train, "\n") 
+cat("Accuracy for testing model=", accuracy_test, "\n")
+cat("Time for training model=", train_time[3], "s \n") 
+cat("Time for testing model=", test_time[3], "s \n")
 ```
 
-### Step 5: Run test on test images
-```{r test}
-tm_test = NA
-feature_test <- as.matrix(dat_test[, -6007])
-if(run.test){
-  load(file="../output/fit_train.RData")
-  tm_test <- system.time({label_pred <- as.integer(test(fit_train, feature_test, pred.type = 'class')); 
-                          prob_pred <- test(fit_train, feature_test, pred.type = 'response')})
-}
-```
-
-
-* evaluation
 ```{r}
-## reweight the test data to represent a balanced label distribution
-label_test <- as.integer(dat_test$label)
-weight_test <- rep(NA, length(label_test))
-for (v in unique(label_test)){
-  weight_test[label_test == v] = 0.5 * length(label_test) / length(label_test[label_test == v])
+feature_train_new <- as.matrix(read.csv("../data/feature_train_smote.csv"))[, -1]
+label_train_new <- read.csv("../data/label_train_smote.csv")[, -1]
+dat_train_new <- data.frame(feature_train_new, label_train_new)
+```
+
+```{r}
+source("../lib/cross_validation.R")
+
+run.pca_lda.cv_new <- FALSE
+if (run.pca_lda.cv_new){
+  acc_means_new <- pca_lda.cv(dat_train_new, K=K)
+  save(acc_means_new, file="../output/pca_lda_cv_new.RData")
+}else{
+  load("../output/pca_lda_cv_new.RData")
 }
-
-accu <- sum(weight_test * (label_pred == label_test)) / sum(weight_test)
-tpr.fpr <- WeightedROC(prob_pred, label_test, weight_test)
-auc <- WeightedAUC(tpr.fpr)
-
-
-cat("The accuracy of model:", model_labels[which.min(res_cv$mean_error)], "is", accu*100, "%.\n")
-cat("The AUC of model:", model_labels[which.min(res_cv$mean_error)], "is", auc, ".\n")
-
-
 ```
 
-### Summarize Running Time
-Prediction performance matters, so does the running times for constructing features and for training the model, especially when the computation resource is limited. 
-```{r running_time}
-cat("Time for constructing training features=", tm_feature_train[1], "s \n")
-cat("Time for constructing testing features=", tm_feature_test[1], "s \n")
-cat("Time for training model=", tm_train[1], "s \n") 
-cat("Time for testing model=", tm_test[1], "s \n")
+```{r best_model_new}
+c_new <- which.max(acc_means_new)
 ```
 
-###Reference
-- Du, S., Tao, Y., & Martinez, A. M. (2014). Compound facial expressions of emotion. Proceedings of the National Academy of Sciences, 111(15), E1454-E1462.
+```{r train and test}
+# Train
+t1_new <- proc.time()
+pca_train_new <- prcomp(feature_train_new)
+
+pca_train_c_new <- pca_train_new$x[,1:c_new]
+dat_train_c_new <- data.frame(pca_train_c_new, label_train_new)
+lda_new <- lda(label_train_new ~ ., data=dat_train_c_new)
+label_predict_train_new <- predict(lda_new, data.frame(pca_train_c_new))
+
+t2_new <- proc.time()
+train_time_new <- t2_new - t1_new
+accuracy_train_new <- mean(label_predict_train_new$class == label_train_new)
 
 
 
+#Test
+t3_new <- proc.time()
+feature_test = as.matrix(dat_test[, -6007])
+label_test = as.integer(dat_test$label)
+
+pca_test <- prcomp(scale(feature_test))
+pca_test_c_new <- pca_test$x[,1:c_new]
+dat_test_c_new <- data.frame(pca_test_c_new, label_test)
+
+label_predict_test_new <- predict(lda_new, data.frame(pca_test_c_new))
+t4_new <- proc.time()
+
+test_time_new <- t4_new - t3_new
+accuracy_test_new <- mean(label_predict_test_new$class == label_test)
+
+
+
+cat("Accuracy for training model=", accuracy_train_new, "\n") 
+cat("Accuracy for testing model=", accuracy_test_new, "\n")
+cat("Time for training model=", train_time_new[3], "s \n") 
+cat("Time for testing model=", test_time_new[3], "s \n")
+```
 
 
 
