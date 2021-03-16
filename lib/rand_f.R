@@ -5,13 +5,11 @@
 
 library(randomForest)
 
-
-
 train_RF <- function(features, labels, ntree, mtry){
   labels <- ifelse(labels == 2, 0, 1)
   labels <- as.character(labels)
   labels <- as.factor(labels)
-  model <- randomForest(features, labels, ntree=ntree, mtry=mtry )
+  model <- randomForest(features, labels, ntree=ntree, mtry=mtry, nodesize = 25,max.depth = 3)
   return(model)
 }
 
