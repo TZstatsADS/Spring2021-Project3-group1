@@ -331,7 +331,7 @@ if(run.cv.rf){
   save(res_cv_rf, file="../output/res_cv_RF.RData")
   
 }else{
-  load("../output/res_cv_RF.RData")
+  #load("../output/res_cv_RF.RData")
 }
 
 
@@ -341,7 +341,7 @@ if(run.cv.rf){
 ###### 5.1.2 Choosing Random Forest tunning parameter
 By running the model with different parameter with same training data. We get several different number of accuracy and AUC. Since we do not need to consider overfitting for the random forest model and in the seek of time for the training model and test model, we decided to choose the parameter with the highest accuracy and AUC with the minimum number of trees and mtrys.
 
-So we choose the parameter, ntrees = 100, mtry =50. 
+So we choose the parameter, ntrees = 100, mtry =20. 
 ```{r find para}
 source("../lib/rand_f.R")
 # training rf
@@ -350,7 +350,7 @@ run.train.RF<-TRUE
 feature_train = as.matrix(dat_train[, -6007])
 label_train = as.integer(dat_train$label) 
 ntrees<-c(25,100,300,500,800)
-mtrys<-c(50)
+mtrys<-c(20)
 run.find.RF<-TRUE
 if (run.find.RF) {
      res_pa_rf <- matrix(NA,nrow=5,ncol=2)
@@ -375,8 +375,8 @@ if (run.find.RF) {
 visualization of the parameter to choose
 ```{r load para}
 load("../output/res_pa_RF.RData")
-plot(ntrees, res_pa_rf[,1], type = "l",ylim=c(0.8,0.85))
-points(ntrees,res_pa_rf[,2]+0.3)
+plot(ntrees, res_pa_rf[,1], type = "l",ylim=c(0.76,0.795))
+points(ntrees,res_pa_rf[,2]+0.25)
 ```
 
 ###### 5.1.3 Train the model with tunning parameter
@@ -391,7 +391,7 @@ label_train = as.integer(dat_train$label)
 
 if (run.train.RF) {
   tm_rfTrain <- system.time(
-     randomforest_fit <- train_RF(feature_train, label_train, ntree = 100, mtry = 50)
+     randomforest_fit <- train_RF(feature_train, label_train, ntree = 100, mtry = 20)
 )
 save(randomforest_fit, file = "../output/train_randomforest.RData")
 }
