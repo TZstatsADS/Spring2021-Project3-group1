@@ -303,6 +303,172 @@ cat("Time for training model=", tm_train[1], "s \n")
 cat("Time for testing model=", tm_test[1], "s \n")
 ```
 
+
+
+#### 5.Advanced model
+#### 5.1 Random Forest
+Random forest is an ensemble machine learning model. The Random Forest model is a collection of several decision trees. These trees come together to a combined decision to give the output. The Random Forest model should have trees which are uncorrelated.
+
+When data points are extremely complicated in arrangement, a simple classification model like Logistic Regression may underfit the model and make wrong predictions. Further, the time taken for the system to process it would also be considerably high. Therefore, we are losing out on both ends. In such scenario, Random Forest can realize that and have more accurate predictions. Further, overfitting is avoided and the model can also handle missing values. 
+
+######  5.1.1 cross-validation
+After the cross validation process, we don't see any remarkable difference between groups. It may due to the feature of the random forest which have trees are uncorrelated. So basically, we use the data after cross-validation to avoid any potential issues later.
+```{r choosingpara}
+library(AUC)
+run.cv.rf<-FALSE
+source("../lib/cross_validarion_rf.R")
+source("../lib/rand_f.R")
+feature_train = as.matrix(dat_train[, -6007])
+label_train = as.integer(dat_train$label) 
+
+ntrees<-c(100,200,300,400,500)
+mtrys<-c(5,10)
+if(run.cv.rf){
+  res_cv_rf <- matrix(0, nrow = length(ntrees)*length(mtrys), ncol = 2)
+  for(i in 1:length(mtrys)){
+    cat("ntree = ", ntrees[i], "\n")
+    for(j in 1:length(ntrees)){
+    cat("mtry = ", mtrys[j], "\n")
+    res_cv_rf[i,] <- cv.function_rf(
+      features = feature_train, labels = label_train, K, ntree = ntrees[j],mtry=mtrys[i])
+  }}
+  save(res_cv_rf, file="../output/res_cv_RF.RData")
+  
+}else{
+  #load("../output/res_cv_RF.RData")
+}
+
+
+
+```
+
+###### 5.1.2 Choosing Random Forest tunning parameter
+By running the model with different parameter with same training data. We get several different number of accuracy and AUC. Since we do not need to consider overfitting for the random forest model and in the seek of time for the training model and test model, we decided to choose the parameter with the highest accuracy and AUC with the minimum number of trees and mtrys.
+
+So we choose the parameter, ntrees = 100, mtry =20. 
+```{r find para}
+source("../lib/rand_f.R")
+# training rf
+# ntree=1000,  nodesize=25, samplesize=nrow(trainx)
+run.train.RF<-TRUE
+feature_train = as.matrix(dat_train[, -6007])
+label_train = as.integer(dat_train$label) 
+ntrees<-c(25,100,300,500,800)
+mtrys<-c(20)
+run.find.RF<-TRUE
+if (run.find.RF) {
+     res_pa_rf <- matrix(NA,nrow=5,ncol=2)
+     for(i in 1:length(ntrees)){
+         randomforest_fit <- train_RF(feature_train, label_train, ntree = ntrees[i], mtry = mtrys)
+         label_pred <- as.integer(test_RF(randomforest_fit, feature_test))
+         label_pred <- ifelse(label_pred == 2, 0, 1)
+         accu_rf = sum(label_pred==dat_test$label)/length(dat_test$label)
+         res_pa_rf[i,1]<-accu_rf
+         tpr.fpr <- WeightedROC(label_pred, dat_test$label)
+         auc_rf <- WeightedAUC(tpr.fpr)
+         res_pa_rf[i,2]<-auc_rf
+         }
+      save(res_pa_rf, file="../output/res_pa_RF.RData")
+}else{
+   load("../output/res_pa_RF.RData")
+}
+     
+
+
+```
+visualization of the parameter to choose
+```{r load para}
+load("../output/res_pa_RF.RData")
+plot(ntrees, res_pa_rf[,1], type = "l",ylim=c(0.76,0.795))
+points(ntrees,res_pa_rf[,2]+0.25)
+```
+
+###### 5.1.3 Train the model with tunning parameter
+Train the model, save the data to the output rDATA with the parameter find before. 
+```{r train Random Forest }
+source("../lib/rand_f.R")
+# training rf
+
+run.train.RF<-TRUE
+feature_train = as.matrix(dat_train[, -6007])
+label_train = as.integer(dat_train$label) 
+
+if (run.train.RF) {
+  tm_rfTrain <- system.time(
+     randomforest_fit <- train_RF(feature_train, label_train, ntree = 100, mtry = 20)
+)
+save(randomforest_fit, file = "../output/train_randomforest.RData")
+}
+```
+
+
+###### 5.1.4 Test the model by train data
+```{r testtrain}
+# testing rf
+tm_rf_train_test = NA
+
+run.test.RF<-TRUE
+if(run.test.RF){
+  load(file="../output/train_randomforest.RData")
+  tm_rf_train_test <- system.time(
+    label_pred_train <- as.integer(test_RF(randomforest_fit, feature_train))); 
+}
+
+label_pred_train <- ifelse(label_pred_train == 2, 1, 2)
+accu_rf_train_test <- sum(label_pred_train==label_train)/length(label_train)
+
+tpr.fpr_train <- WeightedROC(label_pred_train, label_train)
+auc_rf_train <- WeightedAUC(tpr.fpr_train)
+```
+
+###### 5.1.5 Test the model by test data
+Calculate testing time and accuracy on tesing data
+```{r test Random Forest}
+# testing rf
+tm_test_RF = NA
+feature_test <- as.matrix(dat_test[, -6007])
+run.test.RF<-TRUE
+if(run.test.RF){
+  load(file="../output/train_randomforest.RData")
+  tm_test_RF <- system.time(
+    label_pred <- as.integer(test_RF(randomforest_fit, feature_test))); 
+}
+
+```
+
+
+```{r evaluation_rf, echo=FALSE}
+label_pred1 <- ifelse(label_pred == 2, 0, 1)
+accu_rf_test_test = sum(label_pred1==dat_test$label)/length(dat_test$label)
+tpr.fpr_test <- WeightedROC(label_pred1, dat_test$label)
+auc_rf_test <- WeightedAUC(tpr.fpr_test)
+```
+
+###### 5.1.6 Summary of the random forest model
+```{r summary rf}
+cat("The unweighted accuracy of the random forest model on train data is ", accu_rf_train_test*100, "%.\n")
+cat("The unweighted AUC of the random forest model on train data is ", auc_rf_train, ".\n")
+cat("The unweighted accuracy of the random forest model on test data is ", accu_rf_test_test*100, "%.\n")
+cat("The unweighted AUC of the random forest model on test data is ", auc_rf_test, ".\n")
+cat("Time for training model Random Forest = ", tm_rfTrain[1], "s \n")
+cat("Time for test model Random Forest on train data is ",tm_rf_train_test[1] , "s \n")
+cat("Time for test model Random Forest on test data is ",tm_test_RF[1] , "s \n")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ###Reference
 - Du, S., Tao, Y., & Martinez, A. M. (2014). Compound facial expressions of emotion. Proceedings of the National Academy of Sciences, 111(15), E1454-E1462.
 
