@@ -7,8 +7,19 @@
 
 Tree <- function(dat_train, dat_test, run_tree = FALSE){
   
+  # installing and loading required packages
+  if(!require("rpart")){
+    install.packages("rpart")
+  }
+  if(!require("pROC")){
+    install.packages("pROC")
+  }
+  require(rpart)
+  require(pROC)
+  
   # run Tree if run_trees == TRUE, otherwise load "trees.RData"
   if(run_tree){
+    
     # Fit a decision tree using rpart
     # Note: when you fit a tree using rpart, the fitting routine automatically
     # performs 10-fold CV and stores the errors for later use 
@@ -25,7 +36,7 @@ Tree <- function(dat_train, dat_test, run_tree = FALSE){
   
     }
   
-  # find best value of cp
+  # find best value of cost complexity
   min_cp = tree$cptable[which.min(tree$cptable[,"xerror"]),"CP"]
   
   # pruning tree using best cp
