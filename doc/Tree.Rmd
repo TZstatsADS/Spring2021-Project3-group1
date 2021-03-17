@@ -67,7 +67,7 @@ train_label_path <- paste(train_dir, "label.csv", sep="")
 ```{r}
 run.feature.train <- TRUE # process features for training set
 run.feature.test <- TRUE # process features for test set
-run_tree <- FALSE # process tree classification for training set
+run_tree <- TRUE # process tree classification for training set
 ```
 
 ### Step 2: import data and train-test split 
@@ -163,8 +163,8 @@ tree_list.smote = Tree(dat_train_smote, dat_test, run_tree)
 ### step 6: summry from the training and testing result
 
 ```{r}
-cat("Training and testing on imbalanced dataset:\n", "  The accuracy of the decision tree with the minimal cost complexity:", round(tree_list$min_cp, 4), "is", round(mean(tree_list$tree_pred == dat_test$label), 6)*100, "%.\n", "  The AUC of the model is", round(tree_list$treeROC$auc, 4), ".\n", "  Time for training model=", tree_list$tm_tree[1], "s.\n", "  Time for testing model=", tree_list$tm_tree_pred[1], "s.\n")
+cat("Training and testing on imbalanced dataset:\n", "  The training accuracy of the decision tree with the minimal cost complexity:", round(tree_list$min_cp, 4), "is", round(mean(tree_list$tree_pred.train == dat_train$label), 6)*100, "%.\n", "  The testing accuracy of the decision tree with the minimal cost complexity:", round(tree_list$min_cp, 4), "is", round(mean(tree_list$tree_pred == dat_test$label), 6)*100, "%.\n", "  The AUC of the model is", round(tree_list$treeROC$auc, 4), ".\n", "  Time for training model=", tree_list$tm_tree[1], "s.\n", "  Time for testing model=", tree_list$tm_tree_pred[1], "s.\n")
 
-cat("Training and testing on balanced dataset:\n", "  The accuracy of the decision tree with the minimal cost complexity:", round(tree_list.smote$min_cp, 4), "is", round(mean(tree_list.smote$tree_pred == dat_test$label), 6)*100, "%.\n", "  The AUC of the model is", round(tree_list.smote$treeROC$auc, 4), ".\n", "  Time for training model=", tree_list.smote$tm_tree[1], "s.\n", "  Time for testing model=", tree_list.smote$tm_tree_pred[1], "s.\n")
+cat("Training and testing on balanced dataset:\n", "  The training accuracy of the decision tree with the minimal cost complexity:", round(tree_list.smote$min_cp, 4), "is", round(mean(tree_list.smote$tree_pred.train == dat_train_smote$label), 6)*100, "%.\n", "  The testing accuracy of the decision tree with the minimal cost complexity:", round(tree_list.smote$min_cp, 4), "is", round(mean(tree_list.smote$tree_pred == dat_test$label), 6)*100, "%.\n", "  The AUC of the model is", round(tree_list.smote$treeROC$auc, 4), ".\n", "  Time for training model=", tree_list.smote$tm_tree[1], "s.\n", "  Time for testing model=", tree_list.smote$tm_tree_pred[1], "s.\n")
 ```
 

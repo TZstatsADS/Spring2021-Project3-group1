@@ -42,13 +42,16 @@ Tree <- function(dat_train, dat_test, run_tree = FALSE){
   # pruning tree using best cp
   tree_prune = prune(tree, cp = min_cp)
   
+  #
+  tree_pred.train = predict(tree_prune, dat_train, type = "class")
+  
   # make predictions
   tm_tree_pred <- system.time({tree_pred = predict(tree_prune, dat_test, type = "class")})
   tree_prob_pred = predict(tree_prune, dat_test, type = "prob")
   
   treeROC = roc(dat_test$label, tree_prob_pred[,1])
   
-  return(list(tree = tree, tm_tree = tm_tree, min_cp = min_cp, tree_prune = tree_prune, tree_pred = tree_pred, 
-         tm_tree_pred = tm_tree_pred, tree_prob_pred = tree_prob_pred, treeROC = treeROC))
+  return(list(tree = tree, tm_tree = tm_tree, min_cp = min_cp, tree_prune = tree_prune, tree_pred.train = tree_pred.train,
+              tree_pred = tree_pred, tm_tree_pred = tm_tree_pred, tree_prob_pred = tree_prob_pred, treeROC = treeROC))
   
 }
