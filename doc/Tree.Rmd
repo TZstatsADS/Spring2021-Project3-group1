@@ -168,3 +168,84 @@ cat("Training and testing on imbalanced dataset:\n", "  The training accuracy of
 cat("Training and testing on balanced dataset:\n", "  The training accuracy of the decision tree with the minimal cost complexity:", round(tree_list.smote$min_cp, 4), "is", round(mean(tree_list.smote$tree_pred.train == dat_train_smote$label), 6)*100, "%.\n", "  The testing accuracy of the decision tree with the minimal cost complexity:", round(tree_list.smote$min_cp, 4), "is", round(mean(tree_list.smote$tree_pred == dat_test$label), 6)*100, "%.\n", "  The AUC of the model is", round(tree_list.smote$treeROC$auc, 4), ".\n", "  Time for training model=", tree_list.smote$tm_tree[1], "s.\n", "  Time for testing model=", tree_list.smote$tm_tree_pred[1], "s.\n")
 ```
 
+### step 7: in-class testing
+
+Provide directories for training images. Training images and Training fiducial points will be in different subfolders. 
+```{r}
+test_dir <- "../data/test_set_predict/" # This will be modified for different data sets.
+test_image_dir <- paste(test_dir, "images/", sep="")
+test_pt_dir <- paste(test_dir,  "points/", sep="")
+test_label_path <- paste(test_dir, "label_prediction.csv", sep="") 
+```
+
+#### import testing data
+
+```{r}
+#train-test split
+test_info <- read.csv(test_label_path)
+idx <- 1:nrow(test_info)
+#n_train <- round(n*(4/5), 0)
+#train_idx <- sample(info$Index, n_train, replace = F)
+#test_idx <- setdiff(info$Index, train_idx) #get the index in info$Index but different from train_idx
+```
+
+If you choose to extract features from images, such as using Gabor filter, R memory will exhaust all images are read together. The solution is to repeat reading a smaller batch(e.g 100) and process them. 
+```{r}
+n_files <- length(list.files(test_image_dir))
+
+image_list <- list()
+for(i in 1:100){
+   image_list[[i]] <- readImage(paste0(train_image_dir, sprintf("%04d", i), ".jpg"))
+}
+```
+
+Fiducial points are stored in matlab format. In this step, we read them and store them in a list.
+```{r read fiducial points}
+#function to read fiducial points
+#input: index
+#output: matrix of fiducial points corresponding to the index
+readMat.matrix <- function(index){
+     return(round(readMat(paste0(test_pt_dir, sprintf("%04d", index), ".mat"))[[1]],0))
+}
+
+#load fiducial points
+fiducial_pt_list <- lapply(1:n_files, readMat.matrix)
+save(fiducial_pt_list, file="../output/fiducial_pt_list.RData")
+```
+
+#### construct features and responses
+
++ The follow plots show how pairwise distance between fiducial points can work as feature for facial emotion recognition.
+
+  + In the first column, 78 fiducials points of each emotion are marked in order. 
+  + In the second column distributions of vertical distance between right pupil(1) and  right brow peak(21) are shown in  histograms. For example, the distance of an angry face tends to be shorter than that of a surprised face.
+  + The third column is the distributions of vertical distances between right mouth corner(50)
+and the midpoint of the upper lip(52).  For example, the distance of an happy face tends to be shorter than that of a sad face.
+
+![Figure1](../figs/feature_visualization.jpg)
+
+`feature.R` should be the wrapper for all your feature engineering functions and options. The function `feature( )` should have options that correspond to different scenarios for your project and produces an R object that contains features and responses that are required by all the models you are going to evaluate later. 
+  
+  + `feature.R`
+  + Input: list of images or fiducial point
+  + Output: an RData file that contains extracted features and corresponding responses
+
+```{r feature}
+source("../lib/feature.R")
+
+tm_feature_test <- NA
+if(run.feature.test){
+  tm_feature_test <- system.time(in_class_test <- feature(fiducial_pt_list, idx))
+  save(in_class_test, file="../output/in_class_test.RData")
+}else{
+  load(file="../output/in_class_test.RData")
+}
+```
+
+#### prediction on in-class testing data
+```{r}
+in_class_tree_pred = predict(tree_list.smote$tree_prune, in_class_test, type = "class")
+
+sum(in_class_tree_pred == 0)
+```
+
