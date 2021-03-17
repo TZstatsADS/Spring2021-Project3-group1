@@ -471,8 +471,8 @@ result_imbala["BGM", ] <- c("77.66369 %", "0.9429109", "11.718 s", "11.718 s")
 result_imbala["PCA-LDA", ] <- c("82.83333 %", "NA", "119.59 s", "6.44 s")
 result_imbala["Decision Tree", ] <- c("78.8333 %", "0.4262", "46.934 s", "1.104 s")
 result_imbala["Random forest", ] <- c("88.6667 %", "0.7151", "118.398 s", "0.129 s")
+result_imbala["Neural network", ] <- c("80.04 %", "0.4814", "5.077 s", ".084 s")
 result_imbala
-
 ```
 
 ```{r model_selection_with_resample}
@@ -483,6 +483,7 @@ result_bala["BGM", ] <- c("87.93692 %", "0.9551305", "286.994 s", "11.591 s")
 result_bala["PCA-LDA", ] <- c("81.33333 %", "NA", "293.19 s", "9.58 s")
 result_bala["Decision Tree", ] <- c("77 %", "0.4679", "59.29 s", "1.161 s")
 result_bala["Random forest", ] <- c("94.83333 %", "0.871844", "229.898 s", "0.167 s")
+result_bala["Neural network", ] <- c("83.2 %", "0.9096", "15.45 s", ".2416 s")
 result_bala
 
 ```
