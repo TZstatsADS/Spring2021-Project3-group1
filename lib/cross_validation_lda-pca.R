@@ -8,11 +8,8 @@
 
 pca_lda.cv <- function(data, K){
   ### Input:
-  ### - features: feature data frame
-  ### - labels: label data vector
+  ### - data: the data frame
   ### - K: a number stands for K-fold CV
-  ### - l: tuning parameters 
-  ### - reweight: sample reweighting 
   
   set.seed(2020)
   feature_train <- as.matrix(data[, -6007])
