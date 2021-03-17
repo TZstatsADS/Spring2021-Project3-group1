@@ -1,6 +1,6 @@
 ---
 title: "Main"
-author: "Chengliang Tang, Yujie Wang, Diane Lu, Tian Zheng"
+author: "Pin-Chun Chen, Sean Harris, Yandong Xiong, Zhihang Xia, Shuqi Yu"
 output:
   pdf_document: default
   html_notebook: default
@@ -709,17 +709,19 @@ cat("Time for test model Random Forest on test data is ",tm_test_RF[1] , "s \n")
 
 
 #####The test day code
+
 ```{r test day}
 # testing rf
 tm_test_RF_td = NA
-feature_test_td <- as.matrix(td[, -6007])
 run.test.RF<-TRUE
 if(run.test.RF){
   load(file="../output/train_randomforest.RData")
   tm_test_RF_td <- system.time(
-    label_pred_td <- as.integer(test_RF(randomforest_fit_resample, feature_test_td)))
-   write.csv(label_pred_td, "mydata.csv")
+    label_pred_td <- as.integer(test_RF(randomforest_fit_resample, feature_test)))
+   label_pred_td <- ifelse(label_pred_td == 2, 0, 1)
+   write.csv(cbind(label_pred,label_pred_td), "testday output.csv")
 }
+
 
 ```
 
