@@ -1,0 +1,275 @@
+---
+title: "PCA-LDA"
+author: "Zhihang Xia"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+```{r message=FALSE}
+if(!require("EBImage")){
+  install.packages("BiocManager")
+  BiocManager::install("EBImage")
+}
+if(!require("R.matlab")){
+  install.packages("R.matlab")
+}
+if(!require("readxl")){
+  install.packages("readxl")
+}
+
+if(!require("dplyr")){
+  install.packages("dplyr")
+}
+if(!require("readxl")){
+  install.packages("readxl")
+}
+
+if(!require("ggplot2")){
+  install.packages("ggplot2")
+}
+
+if(!require("caret")){
+  install.packages("caret")
+}
+
+if(!require("glmnet")){
+  install.packages("glmnet")
+}
+
+if(!require("WeightedROC")){
+  install.packages("WeightedROC")
+}
+
+library(R.matlab)
+library(readxl)
+library(dplyr)
+library(EBImage)
+library(ggplot2)
+library(caret)
+library(glmnet)
+library(WeightedROC)
+library(MASS)
+library(vtreat)
+```
+
+### Step 0 set work directories
+```{r wkdir, eval=FALSE}
+set.seed(2020)
+#setwd("../../Spring2021-Project3-group-1/doc")
+```
+
+Provide directories for training images. Training images and Training fiducial points will be in different subfolders. 
+```{r}
+train_dir <- "../data/train_set/" # This will be modified for different data sets.
+train_image_dir <- paste(train_dir, "images/", sep="")
+train_pt_dir <- paste(train_dir,  "points/", sep="")
+train_label_path <- paste(train_dir, "label.csv", sep="") 
+```
+
+### Step 1: set up controls for evaluation experiments.
+```{r exp_setup}
+run.cv <- TRUE # run cross-validation on the training set
+sample.reweight <- TRUE # run sample reweighting in model training
+K <- 5  # number of CV folds
+run.feature.train <- TRUE # process features for training set
+run.test <- TRUE # run evaluation on an independent test set
+run.feature.test <- TRUE # process features for test set
+```
+
+### Step 2: import data and train-test split 
+```{r}
+#train-test split
+info <- read.csv(train_label_path)
+n <- nrow(info)
+n_train <- round(n*(4/5), 0)
+train_idx <- sample(info$Index, n_train, replace = F)
+test_idx <- setdiff(info$Index, train_idx)
+```
+
+
+```{r}
+n_files <- length(list.files(train_image_dir))
+
+image_list <- list()
+for(i in 1:100){
+   image_list[[i]] <- readImage(paste0(train_image_dir, sprintf("%04d", i), ".jpg"))
+}
+```
+
+Fiducial points are stored in matlab format. In this step, we read them and store them in a list.
+```{r read fiducial points}
+#function to read fiducial points
+#input: index
+#output: matrix of fiducial points corresponding to the index
+readMat.matrix <- function(index){
+     return(round(readMat(paste0(train_pt_dir, sprintf("%04d", index), ".mat"))[[1]],0))
+}
+
+#load fiducial points
+fiducial_pt_list <- lapply(1:n_files, readMat.matrix)
+save(fiducial_pt_list, file="../output/fiducial_pt_list.RData")
+```
+
+### Step 3: construct features and responses
+
+`feature.R` should be the wrapper for all your feature engineering functions and options. The function `feature( )` should have options that correspond to different scenarios for your project and produces an R object that contains features and responses that are required by all the models you are going to evaluate later. 
+  
+  + `feature.R`
+  + Input: list of images or fiducial point
+  + Output: an RData file that contains extracted features and corresponding responses
+
+```{r feature}
+source("../lib/feature.R")
+tm_feature_train <- NA
+if(run.feature.train){
+  tm_feature_train <- system.time(dat_train <- feature(fiducial_pt_list, train_idx))
+  save(dat_train, file="../output/feature_train.RData")
+}else{
+  load(file="../output/feature_train.RData")
+}
+
+tm_feature_test <- NA
+if(run.feature.test){
+  tm_feature_test <- system.time(dat_test <- feature(fiducial_pt_list, test_idx))
+  save(dat_test, file="../output/feature_test.RData")
+}else{
+  load(file="../output/feature_test.RData")
+}
+
+
+```
+
+### Step 4: Train PCA-lDA model with training features and responses
+* Do model selection by choosing among different values of training model parameters.
+
+```{r run.pca_lda.cv}
+source("../lib/cross_validation_lda-pca.R")
+
+run.pca_lda.cv = FALSE
+if (run.pca_lda.cv){
+  acc_means <- pca_lda.cv(dat_train, K=K)
+  save(acc_means, file="../output/pca_lda_cv.RData")
+}else{
+  load("../output/pca_lda_cv.RData")
+}
+```
+
+
+* Choose the "best" parameter value
+```{r best_model}
+c <- which.max(acc_means)
+c
+```
+
+```{r train and test}
+# Train
+t1 <- proc.time()
+feature_train = as.matrix(dat_train[, -6007])
+label_train = as.integer(dat_train$label)
+pca_train <- prcomp(feature_train)
+
+CPVE <- (cumsum((pca_train$sdev)^2)/sum((pca_train$sdev)^2))
+plot(1:length(CPVE), CPVE, xlab="PCs", ylab="Total Variance", xlim=c(0,300))
+
+pca_train_c <- pca_train$x[,1:c]
+dat_train_c <- data.frame(pca_train_c, label_train)
+lda <- lda(label_train ~ ., data=dat_train_c)
+label_predict_train <- predict(lda, data.frame(pca_train_c))
+
+t2 <- proc.time()
+train_time <- t2 - t1
+accuracy_train <- mean(label_predict_train$class == label_train)
+
+save(lda, file="../output/lda.RData")
+
+#Test
+t3 <- proc.time()
+feature_test = as.matrix(dat_test[, -6007])
+label_test = as.integer(dat_test$label)
+pca_test <- predict(pca_train, feature_test)
+
+label_predict_test <- predict(lda, data.frame(pca_test))
+t4 <- proc.time()
+
+test_time <- t4 - t3
+accuracy_test <- mean(label_predict_test$class == label_test)
+
+
+
+cat("Accuracy for training model=", accuracy_train, "\n") 
+cat("Accuracy for testing model=", accuracy_test, "\n")
+cat("Time for training model=", train_time[3], "s \n") 
+cat("Time for testing model=", test_time[3], "s \n")
+
+```
+
+```{r new data}
+feature_train_new <- as.matrix(read.csv("../data/feature_train_smote.csv"))[, -1]
+label_train_new <- read.csv("../data/label_train_smote.csv")[, -1]
+dat_train_new <- data.frame(feature_train_new, label_train_new)
+```
+
+```{r run.pca_lda.cv_new}
+source("../lib/cross_validation_lda-pca.R")
+
+run.pca_lda.cv_new <- FALSE
+if (run.pca_lda.cv_new){
+  acc_means_new <- pca_lda.cv(dat_train_new, K=K)
+  save(acc_means_new, file="../output/pca_lda_cv_new.RData")
+}else{
+  load("../output/pca_lda_cv_new.RData")
+}
+```
+
+```{r best_model_new}
+c_new <- which.max(acc_means_new)
+c_new
+```
+
+```{r train_new and test_new}
+# Train
+t1_new <- proc.time()
+pca_train_new <- prcomp(feature_train_new)
+
+CPVE_new <- (cumsum((pca_train_new$sdev)^2)/sum((pca_train_new$sdev)^2))
+plot(1:length(CPVE_new), CPVE_new, xlab="PCs", ylab="Total Variance", xlim=c(0,300))
+
+pca_train_c_new <- pca_train_new$x[,1:c_new]
+dat_train_c_new <- data.frame(pca_train_c_new, label_train_new)
+lda_new <- lda(label_train_new ~ ., data=dat_train_c_new)
+label_predict_train_new <- predict(lda_new, data.frame(pca_train_c_new))
+
+t2_new <- proc.time()
+train_time_new <- t2_new - t1_new
+accuracy_train_new <- mean(label_predict_train_new$class == label_train_new)
+
+save(lda_new, file="../output/lda_new.RData")
+
+#Test
+t3_new <- proc.time()
+feature_test = as.matrix(dat_test[, -6007])
+label_test = as.integer(dat_test$label)
+pca_test_new <- predict(pca_train_new, feature_test)
+
+label_predict_test_new <- predict(lda_new, data.frame(pca_test_new))
+t4_new <- proc.time()
+
+test_time_new <- t4_new - t3_new
+accuracy_test_new <- mean(label_predict_test_new$class == label_test)
+
+cat("Accuracy for training new model=", accuracy_train_new, "\n") 
+cat("Accuracy for testing new model=", accuracy_test_new, "\n")
+cat("Time for training new model=", train_time_new[3], "s \n") 
+cat("Time for testing new model=", test_time_new[3], "s \n")
+```
+
+
+
+
+
+
+
+
+
+
