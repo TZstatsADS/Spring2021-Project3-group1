@@ -49,6 +49,14 @@ if(!require("gbm")){
   install.packages("gbm")
 }
 
+if(!require("randomForest")){
+  install.packages("randomForest")
+}
+
+if(!require("ggpubr")){
+  install.packages("ggpubr")
+}
+
 library(R.matlab)
 library(readxl)
 library(dplyr)
@@ -58,6 +66,8 @@ library(caret)
 library(glmnet)
 library(WeightedROC)
 library(gbm)
+library(randomForest)
+library(ggpubr)
 ```
 
 ### Step 0 set work directories
@@ -260,11 +270,7 @@ if(run.cv.gbm.graph){
                ymin = mean_AUC - sd_AUC, ymax = mean_AUC + sd_AUC)) + 
     geom_crossbar() +
     theme(axis.text.x = element_text(angle = 90, hjust = 1))
-  
-  print(p1)
-  print(p2)
-  print(p3)
-  print(p4)
+  ggarrange(p1, p2, p3, p4, nrow=2, ncol=2)
 }
 
 ```
@@ -454,6 +460,34 @@ cat("Time for testing model=", tm_test_gbm_resample[1], "s \n")
 
 
 #### 5.Advanced model
+
+#### 5.1 Model Selection
+
+```{r model_selection_without_resample}
+result_imbala = matrix(NA, nrow = 5, ncol = 4)
+colnames(result_imbala) <- c("Accuracy", "AUC", "Training time", "Testing time")
+rownames(result_imbala) <- c("BGM", "PCA-LDA", "Decision Tree", "Random forest","Neural network")
+result_imbala["BGM", ] <- c("77.66369 %", "0.9429109", "11.718 s", "11.718 s")
+result_imbala["PCA-LDA", ] <- c("82.83333 %", "NA", "119.59 s", "6.44 s")
+result_imbala["Decision Tree", ] <- c("78.8333 %", "0.4262", "46.934 s", "1.104 s")
+result_imbala["Random forest", ] <- c("88.6667 %", "0.7151", "118.398 s", "0.129 s")
+result_imbala["Neural network", ] <- c("80.04 %", "0.4814", "5.077 s", ".084 s")
+result_imbala
+```
+
+```{r model_selection_with_resample}
+result_bala = matrix(NA, nrow = 5, ncol = 4)
+colnames(result_bala) <- c("Accuracy", "AUC", "Training time", "Testing time")
+rownames(result_bala) <- c("BGM", "PCA-LDA", "Decision Tree", "Random forest","Neural network")
+result_bala["BGM", ] <- c("87.93692 %", "0.9551305", "286.994 s", "11.591 s")
+result_bala["PCA-LDA", ] <- c("81.33333 %", "NA", "293.19 s", "9.58 s")
+result_bala["Decision Tree", ] <- c("77 %", "0.4679", "59.29 s", "1.161 s")
+result_bala["Random forest", ] <- c("94.83333 %", "0.871844", "229.898 s", "0.167 s")
+result_bala["Neural network", ] <- c("83.2 %", "0.9096", "15.45 s", ".2416 s")
+result_bala
+
+```
+
 #### 5.1 Random Forest
 Random forest is an ensemble machine learning model. The Random Forest model is a collection of several decision trees. These trees come together to a combined decision to give the output. The Random Forest model should have trees which are uncorrelated.
 
