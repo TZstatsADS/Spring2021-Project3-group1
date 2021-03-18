@@ -2,11 +2,10 @@
 
 ### Doc folder
 
-The doc directory contains the report or presentation files. It can have subfolders.  
+The doc directory contains the report file including the baseline(GBM) and the most advanced(randomforest) model, and rmd/pdf files including results from the obsolete advanced models.   
 
-For each model, we have pruning and cross-validation process to choose the best parameter, and then trian and test the model with the best parameter.
-Also, for each model, we have done the process decribed above for unweighted data and weighted data respectively.
+We have two types of dataset to be studied, imbalanced dataset(original one) and balanced dataset(smote one).
 
-The main.rmd and main.pdf contains only the baseline model and the randomforest model.
-The detail for other models is included in the rmd file and pdf file named after the models.
+All of the models are built with the best parameter by pruning and cross-validation processe based on splited training data. 
 
+Details of training and testing processes can be found in .R files for the corresponding model in lib folder.
